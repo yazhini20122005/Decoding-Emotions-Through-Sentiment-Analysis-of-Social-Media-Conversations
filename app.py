@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from wordcloud import WordCloud
 import re
 from collections import Counter
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Twitter Sentiment Analyzer", layout="wide")
 
 # Load dataset
 def load_data(uploaded_file):
@@ -28,11 +27,11 @@ def clean_data(df):
     df['Tweet'] = df['Tweet'].str.strip()
     return df
 
-# Analyze sentiment distribution
+# Sentiment distribution
 def analyze_sentiment(df):
     return df.groupby(['Entity', 'Sentiment']).size().unstack(fill_value=0)
 
-# Generate word cloud data
+# Word frequency generator
 def generate_word_cloud_data(tweets, sentiment):
     words = []
     for tweet in tweets[tweets['Sentiment'] == sentiment]['Tweet']:
@@ -41,63 +40,62 @@ def generate_word_cloud_data(tweets, sentiment):
             words.extend([word for word in cleaned.split() if len(word) > 3])
     return dict(Counter(words).most_common(50))
 
-# Bar chart
-def plot_bar_chart(sentiment_counts):
-    st.subheader("Sentiment Distribution by Entity")
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sentiment_counts.plot(kind='bar', ax=ax, color=['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
-    ax.set_xlabel("Entity")
-    ax.set_ylabel("Number of Tweets")
-    ax.set_title("Sentiment Distribution by Entity")
-    ax.legend(title="Sentiment")
-    st.pyplot(fig)
-
-# Pie charts
-def plot_pie_charts(sentiment_counts):
-    st.subheader("Sentiment Proportions by Entity")
-    for entity in sentiment_counts.index:
-        fig, ax = plt.subplots()
-        counts = sentiment_counts.loc[entity]
-        ax.pie(counts, labels=counts.index, autopct='%1.1f%%', startangle=140,
-               colors=['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
-        ax.set_title(f'Sentiment Proportions for {entity}')
-        st.pyplot(fig)
-
-# Word clouds
-def plot_word_clouds(df):
-    st.subheader("Word Clouds for 'Borderlands'")
-    for sentiment in ['Positive', 'Negative']:
-        words = generate_word_cloud_data(df[df['Entity'] == 'Borderlands'], sentiment)
-        if words:
-            wc = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(words)
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.imshow(wc, interpolation='bilinear')
-            ax.axis('off')
-            ax.set_title(f'Word Cloud: {sentiment} Borderlands Tweets')
-            st.pyplot(fig)
-
-# Streamlit UI
+# Streamlit interface
 def main():
-    st.title("📊 Sentiment Analysis of Tweets")
-    uploaded_file = st.file_uploader("Upload your CSV file (twitter_training.csv)", type="csv")
+    st.title("📊 Twitter Sentiment Analyzer")
+    uploaded_file = st.file_uploader("📂 Upload your twitter_training.csv", type="csv")
 
     if uploaded_file:
         df = load_data(uploaded_file)
         if df is not None:
             df = clean_data(df)
-            st.success("Data loaded and cleaned successfully.")
-            st.write("Sample Data:", df.head())
+
+            if df.empty:
+                st.warning("No valid data found after cleaning.")
+                return
+
+            st.success("Data loaded and cleaned successfully!")
+            st.dataframe(df.head(10))
+
+            st.markdown("## 🔍 Select Analysis Type")
+            analysis_option = st.selectbox("Choose analysis type:", [
+                "Sentiment Distribution",
+                "Pie Chart by Entity",
+                "Word Cloud by Sentiment"
+            ])
 
             sentiment_counts = analyze_sentiment(df)
-            st.write("Sentiment Distribution Table:", sentiment_counts)
 
-            if 'Borderlands' in sentiment_counts.index:
-                positive_pct = sentiment_counts.loc['Borderlands', 'Positive'] / sentiment_counts.loc['Borderlands'].sum() * 100
-                st.info(f"📌 Interesting Fact: {positive_pct:.1f}% of Borderlands tweets are Positive, reflecting strong fan enthusiasm.")
+            if analysis_option == "Sentiment Distribution":
+                st.subheader("📊 Sentiment Distribution by Entity")
+                st.bar_chart(sentiment_counts)
 
-            plot_bar_chart(sentiment_counts)
-            plot_pie_charts(sentiment_counts)
-            plot_word_clouds(df)
+            elif analysis_option == "Pie Chart by Entity":
+                selected_entity = st.selectbox("Select an Entity", sentiment_counts.index)
+                entity_data = sentiment_counts.loc[selected_entity]
+
+                fig, ax = plt.subplots()
+                ax.pie(entity_data, labels=entity_data.index, autopct='%1.1f%%',
+                       colors=['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
+                ax.set_title(f"Sentiment Breakdown: {selected_entity}")
+                st.pyplot(fig)
+
+            elif analysis_option == "Word Cloud by Sentiment":
+                selected_entity = st.selectbox("Select Entity for Word Cloud", df['Entity'].unique())
+                selected_sentiment = st.radio("Choose Sentiment", ['Positive', 'Negative'])
+
+                filtered_df = df[df['Entity'] == selected_entity]
+                word_data = generate_word_cloud_data(filtered_df, selected_sentiment)
+
+                if word_data:
+                    wc = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_data)
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.imshow(wc, interpolation='bilinear')
+                    ax.axis('off')
+                    ax.set_title(f"{selected_sentiment} Tweets Word Cloud for {selected_entity}")
+                    st.pyplot(fig)
+                else:
+                    st.warning("No matching words found.")
 
 if __name__ == "__main__":
     main()
