@@ -7,10 +7,10 @@ from collections import Counter
 
 st.set_page_config(page_title="Twitter Sentiment Analyzer", layout="wide")
 
-# Load dataset
-def load_data(uploaded_file):
+# Load dataset directly
+def load_data(file_path):
     try:
-        df = pd.read_csv(uploaded_file, header=None, names=['ID', 'Entity', 'Sentiment', 'Tweet'], quotechar='"', skipinitialspace=True)
+        df = pd.read_csv(file_path, header=None, names=['ID', 'Entity', 'Sentiment', 'Tweet'], quotechar='"', skipinitialspace=True)
         return df
     except Exception as e:
         st.error(f"Error loading CSV: {e}")
@@ -31,7 +31,7 @@ def clean_data(df):
 def analyze_sentiment(df):
     return df.groupby(['Entity', 'Sentiment']).size().unstack(fill_value=0)
 
-# Word frequency generator
+# Word frequency
 def generate_word_cloud_data(tweets, sentiment):
     words = []
     for tweet in tweets[tweets['Sentiment'] == sentiment]['Tweet']:
@@ -40,62 +40,64 @@ def generate_word_cloud_data(tweets, sentiment):
             words.extend([word for word in cleaned.split() if len(word) > 3])
     return dict(Counter(words).most_common(50))
 
-# Streamlit interface
+# App logic
 def main():
     st.title("📊 Twitter Sentiment Analyzer")
-    uploaded_file = st.file_uploader("📂 Upload your twitter_training.csv", type="csv")
 
-    if uploaded_file:
-        df = load_data(uploaded_file)
-        if df is not None:
-            df = clean_data(df)
+    # Fixed file path (replace with your file location if needed)
+    file_path = "twitter_training.csv"
+    df = load_data(file_path)
 
-            if df.empty:
-                st.warning("No valid data found after cleaning.")
-                return
+    if df is not None:
+        df = clean_data(df)
 
-            st.success("Data loaded and cleaned successfully!")
-            st.dataframe(df.head(10))
+        if df.empty:
+            st.warning("No valid data found after cleaning.")
+            return
 
-            st.markdown("## 🔍 Select Analysis Type")
-            analysis_option = st.selectbox("Choose analysis type:", [
-                "Sentiment Distribution",
-                "Pie Chart by Entity",
-                "Word Cloud by Sentiment"
-            ])
+        st.success("✅ Data loaded and cleaned successfully!")
+        st.dataframe(df.head(10))
 
-            sentiment_counts = analyze_sentiment(df)
+        st.markdown("## 🔍 Choose Analysis Type")
+        analysis_option = st.selectbox("Choose analysis type:", [
+            "Sentiment Distribution",
+            "Pie Chart by Entity",
+            "Word Cloud by Sentiment"
+        ])
 
-            if analysis_option == "Sentiment Distribution":
-                st.subheader("📊 Sentiment Distribution by Entity")
-                st.bar_chart(sentiment_counts)
+        sentiment_counts = analyze_sentiment(df)
 
-            elif analysis_option == "Pie Chart by Entity":
-                selected_entity = st.selectbox("Select an Entity", sentiment_counts.index)
-                entity_data = sentiment_counts.loc[selected_entity]
+        if analysis_option == "Sentiment Distribution":
+            st.subheader("📊 Sentiment Distribution by Entity")
+            st.bar_chart(sentiment_counts)
 
-                fig, ax = plt.subplots()
-                ax.pie(entity_data, labels=entity_data.index, autopct='%1.1f%%',
-                       colors=['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
-                ax.set_title(f"Sentiment Breakdown: {selected_entity}")
+        elif analysis_option == "Pie Chart by Entity":
+            selected_entity = st.selectbox("Select an Entity", sentiment_counts.index)
+            entity_data = sentiment_counts.loc[selected_entity]
+
+            fig, ax = plt.subplots()
+            ax.pie(entity_data, labels=entity_data.index, autopct='%1.1f%%',
+                   colors=['#4CAF50', '#F44336', '#2196F3', '#FF9800'])
+            ax.set_title(f"Sentiment Breakdown: {selected_entity}")
+            st.pyplot(fig)
+
+        elif analysis_option == "Word Cloud by Sentiment":
+            selected_entity = st.selectbox("Select Entity for Word Cloud", df['Entity'].unique())
+            selected_sentiment = st.radio("Choose Sentiment", ['Positive', 'Negative'])
+
+            filtered_df = df[df['Entity'] == selected_entity]
+            word_data = generate_word_cloud_data(filtered_df, selected_sentiment)
+
+            if word_data:
+                wc = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_data)
+                fig, ax = plt.subplots(figsize=(10, 5))
+                ax.imshow(wc, interpolation='bilinear')
+                ax.axis('off')
+                ax.set_title(f"{selected_sentiment} Word Cloud for {selected_entity}")
                 st.pyplot(fig)
-
-            elif analysis_option == "Word Cloud by Sentiment":
-                selected_entity = st.selectbox("Select Entity for Word Cloud", df['Entity'].unique())
-                selected_sentiment = st.radio("Choose Sentiment", ['Positive', 'Negative'])
-
-                filtered_df = df[df['Entity'] == selected_entity]
-                word_data = generate_word_cloud_data(filtered_df, selected_sentiment)
-
-                if word_data:
-                    wc = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(word_data)
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    ax.imshow(wc, interpolation='bilinear')
-                    ax.axis('off')
-                    ax.set_title(f"{selected_sentiment} Tweets Word Cloud for {selected_entity}")
-                    st.pyplot(fig)
-                else:
-                    st.warning("No matching words found.")
+            else:
+                st.warning("No matching words found.")
 
 if __name__ == "__main__":
     main()
+
